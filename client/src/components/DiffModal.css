@@ -1,0 +1,160 @@
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  color: #111827;
+}
+
+.close-button {
+  background: none;
+  border: none;
+  font-size: 32px;
+  cursor: pointer;
+  color: #6b7280;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-button:hover {
+  color: #111827;
+}
+
+.diff-summary {
+  display: flex;
+  gap: 24px;
+  padding: 20px;
+  background: #f9fafb;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-item .label {
+  font-size: 12px;
+  color: #6b7280;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.summary-item .value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.summary-item .value.positive {
+  color: #10b981;
+}
+
+.summary-item .value.negative {
+  color: #ef4444;
+}
+
+.diff-files {
+  padding: 20px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.diff-files h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #111827;
+}
+
+.diff-files ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.file-name {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  color: #111827;
+}
+
+.file-stats {
+  display: flex;
+  gap: 12px;
+}
+
+.file-stats .positive {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.file-stats .negative {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.diff-preview {
+  padding: 20px;
+}
+
+.diff-preview h3 {
+  margin: 0 0 12px 0;
+  font-size: 18px;
+  color: #111827;
+}
+
+.diff-content {
+  background: #1f2937;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}

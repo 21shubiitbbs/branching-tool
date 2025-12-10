@@ -1,0 +1,18 @@
+{
+  "name": "branching-tool",
+  "version": "1.0.0",
+  "description": "Drag-and-drop Git branch merging tool with branching strategy enforcement",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && npm start",
+    "install-all": "npm install && cd server && npm install && cd ../client && npm install"
+  },
+  "keywords": ["git", "branch", "merge", "tool"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
