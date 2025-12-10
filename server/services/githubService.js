@@ -247,6 +247,35 @@ class GitHubService {
     }
 
     try {
+      // First, check if there are commits between the branches
+      try {
+        const { data: compare } = await this.octokit.repos.compareCommits({
+          owner: this.owner,
+          repo: this.repo,
+          base: targetBranch,
+          head: sourceBranch,
+        });
+
+        // Check if branches are identical or source has no unique commits
+        if (compare.status === 'identical' || (compare.ahead_by === 0 && compare.behind_by === 0)) {
+          throw new Error(`Cannot create pull request: ${sourceBranch} and ${targetBranch} are at the same commit. There are no new commits to merge.`);
+        }
+
+        // Check if source branch is behind (all commits already in target)
+        if (compare.ahead_by === 0 && compare.behind_by > 0) {
+          throw new Error(`Cannot create pull request: ${sourceBranch} has no commits ahead of ${targetBranch}. The source branch is behind by ${compare.behind_by} commit(s).`);
+        }
+      } catch (error) {
+        // If it's our custom error, rethrow it
+        if (error && error.message && error.message.includes('Cannot create pull request')) {
+          throw error;
+        }
+        // If compareCommits fails for other reasons, log but continue
+        // (GitHub will validate anyway)
+        const errorMsg = error?.message || error?.toString() || 'Unknown error';
+        console.warn('Warning: Could not compare branches before creating PR:', errorMsg);
+      }
+
       const { data: pr } = await this.octokit.pulls.create({
         owner: this.owner,
         repo: this.repo,
@@ -267,7 +296,16 @@ class GitHubService {
         }
       };
     } catch (error) {
-      throw new Error(`Failed to create pull request: ${error.message}`);
+      // Provide more user-friendly error messages
+      const errorMsg = error?.message || error?.toString() || 'Unknown error';
+      
+      if (errorMsg.includes('No commits between')) {
+        throw new Error(`Cannot create pull request: ${sourceBranch} and ${targetBranch} are at the same commit. There are no new commits to merge.`);
+      }
+      if (errorMsg.includes('Cannot create pull request')) {
+        throw error; // Re-throw our custom validation errors
+      }
+      throw new Error(`Failed to create pull request: ${errorMsg}`);
     }
   }
 
