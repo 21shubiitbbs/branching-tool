@@ -1,0 +1,262 @@
+.merge-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.merge-confirm-modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 500px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.3s ease-out;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.merge-confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  position: relative;
+}
+
+.merge-confirm-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.merge-confirm-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.merge-confirm-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 28px;
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: all 0.2s;
+}
+
+.merge-confirm-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+.merge-confirm-body {
+  padding: 24px;
+}
+
+.merge-confirm-message {
+  margin-bottom: 20px;
+}
+
+.merge-confirm-message p {
+  margin: 0 0 20px 0;
+  color: #374151;
+  font-size: 16px;
+  text-align: center;
+}
+
+.merge-branch-flow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.branch-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.branch-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.branch-badge.source-branch {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+}
+
+.branch-badge.target-branch {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.branch-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.branch-name {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+}
+
+.merge-arrow {
+  font-size: 24px;
+  color: #6b7280;
+  font-weight: bold;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.merge-confirm-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+
+.warning-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.warning-text {
+  color: #92400e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.merge-confirm-actions {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.merge-confirm-btn {
+  flex: 1;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.cancel-btn {
+  background: white;
+  color: #374151;
+  border: 2px solid #e5e7eb;
+}
+
+.cancel-btn:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.confirm-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+}
+
+.confirm-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+}
+
+.confirm-btn:active {
+  transform: translateY(0);
+}
+
+/* Responsive design */
+@media (max-width: 640px) {
+  .merge-confirm-modal {
+    width: 95%;
+    margin: 20px;
+  }
+  
+  .merge-branch-flow {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .merge-arrow {
+    transform: rotate(90deg);
+  }
+  
+  .merge-confirm-actions {
+    flex-direction: column;
+  }
+  
+  .merge-confirm-btn {
+    width: 100%;
+  }
+}
