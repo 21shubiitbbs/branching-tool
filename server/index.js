@@ -70,14 +70,140 @@ app.get('/api/branches', async (req, res) => {
   }
 });
 
+// Create a new branch from a source branch (must be before /api/branches/:branchName)
+app.post('/api/branches/create', async (req, res) => {
+  try {
+    const { newBranchName, sourceBranch } = req.body;
+    if (!newBranchName || !sourceBranch) {
+      return res.status(400).json({ error: 'New branch name and source branch are required' });
+    }
+
+    const result = await branchService.createBranch(newBranchName, sourceBranch);
+    res.json(result);
+  } catch (error) {
+    console.error('Error creating branch:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Checkout to a branch and pull latest changes
+app.post('/api/branches/checkout', async (req, res) => {
+  try {
+    const { branchName } = req.body;
+    if (!branchName) {
+      return res.status(400).json({ error: 'Branch name is required' });
+    }
+
+    const result = await branchService.checkoutAndPull(branchName);
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking out branch:', error);
+    // If error has uncommitted changes details, include them
+    if (error.uncommittedChanges) {
+      return res.status(400).json({ 
+        error: error.message,
+        uncommittedChanges: error.uncommittedChanges,
+        code: 'UNCOMMITTED_CHANGES'
+      });
+    }
+    // Check if error message mentions uncommitted changes
+    if (error.message && (error.message.includes('uncommitted changes') || error.message.includes('Please commit or stash'))) {
+      // Try to get uncommitted changes details
+      try {
+        const changes = await branchService.getUncommittedChanges();
+        return res.status(400).json({ 
+          error: error.message,
+          uncommittedChanges: changes,
+          code: 'UNCOMMITTED_CHANGES'
+        });
+      } catch (fetchErr) {
+        // If we can't fetch changes, just return the error
+        return res.status(400).json({ 
+          error: error.message,
+          code: 'UNCOMMITTED_CHANGES'
+        });
+      }
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get uncommitted changes
+app.get('/api/branches/uncommitted', async (req, res) => {
+  try {
+    const changes = await branchService.getUncommittedChanges();
+    res.json(changes);
+  } catch (error) {
+    console.error('Error getting uncommitted changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Commit changes
+app.post('/api/branches/commit', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Commit message is required' });
+    }
+
+    const result = await branchService.commitChanges(message);
+    res.json(result);
+  } catch (error) {
+    console.error('Error committing changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stash changes
+app.post('/api/branches/stash', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const result = await branchService.stashChanges(message);
+    res.json(result);
+  } catch (error) {
+    console.error('Error stashing changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Discard changes
+app.post('/api/branches/discard', async (req, res) => {
+  try {
+    const result = await branchService.discardChanges();
+    res.json(result);
+  } catch (error) {
+    console.error('Error discarding changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get branch details (commits ahead/behind, last commit, etc.)
 app.get('/api/branches/:branchName', async (req, res) => {
   try {
-    const { branchName } = req.params;
+    let { branchName } = req.params;
+    
+    // Decode URL-encoded branch names
+    branchName = decodeURIComponent(branchName);
+    
+    // Validate branch name - prevent invalid branch names
+    if (!branchName || branchName.trim() === '' || branchName.includes('uncommitted') || branchName.includes('...')) {
+      return res.status(400).json({ error: 'Invalid branch name' });
+    }
+    
+    // Validate branch name format (basic validation)
+    if (!/^[a-zA-Z0-9._\-\/]+$/.test(branchName)) {
+      return res.status(400).json({ error: 'Invalid branch name format' });
+    }
+    
     const details = await branchService.getBranchDetails(branchName);
     res.json(details);
   } catch (error) {
     console.error('Error fetching branch details:', error);
+    // Check if it's a "branch not found" type error
+    if (error.message && (error.message.includes('unknown revision') || error.message.includes('not in the working tree'))) {
+      return res.status(404).json({ error: `Branch not found: ${req.params.branchName}` });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -289,6 +415,65 @@ app.get('/api/github/pull-requests', async (req, res) => {
     res.json(prs);
   } catch (error) {
     console.error('Error fetching pull requests:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new branch from a source branch (GitHub)
+app.post('/api/github/branches/create', async (req, res) => {
+  try {
+    if (!githubService.isConnected()) {
+      return res.status(400).json({ error: 'Not connected to GitHub' });
+    }
+    const { newBranchName, sourceBranch } = req.body;
+    if (!newBranchName || !sourceBranch) {
+      return res.status(400).json({ error: 'New branch name and source branch are required' });
+    }
+
+    const result = await githubService.createBranch(newBranchName, sourceBranch);
+    
+    // Emit branch creation event
+    io.emit('github:branch-created', result);
+    
+    // Refresh branches
+    try {
+      const branches = await githubService.getAllBranches();
+      io.emit('github:branches-updated', branches);
+    } catch (e) {
+      console.error('Error refreshing branches after creation:', e);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error creating GitHub branch:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Checkout to a branch and pull latest changes (GitHub)
+app.post('/api/github/branches/checkout', async (req, res) => {
+  try {
+    if (!githubService.isConnected()) {
+      return res.status(400).json({ error: 'Not connected to GitHub' });
+    }
+    const { branchName } = req.body;
+    if (!branchName) {
+      return res.status(400).json({ error: 'Branch name is required' });
+    }
+
+    const result = await githubService.checkoutAndPull(branchName, REPO_PATH);
+    
+    // Refresh branches after checkout
+    try {
+      const branches = await githubService.getAllBranches();
+      io.emit('github:branches-updated', branches);
+    } catch (e) {
+      console.error('Error refreshing branches after checkout:', e);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking out GitHub branch:', error);
     res.status(500).json({ error: error.message });
   }
 });

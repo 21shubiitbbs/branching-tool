@@ -378,6 +378,129 @@ class GitHubService {
   }
 
   /**
+   * Create a new branch from a source branch
+   */
+  async createBranch(newBranchName, sourceBranch) {
+    if (!this.isConnected()) {
+      throw new Error('Not connected to GitHub');
+    }
+
+    try {
+      // Get the SHA of the source branch
+      const { data: sourceBranchData } = await this.octokit.repos.getBranch({
+        owner: this.owner,
+        repo: this.repo,
+        branch: sourceBranch,
+      });
+
+      const sourceSha = sourceBranchData.commit.sha;
+
+      // Check if branch already exists
+      try {
+        await this.octokit.repos.getBranch({
+          owner: this.owner,
+          repo: this.repo,
+          branch: newBranchName,
+        });
+        throw new Error(`Branch ${newBranchName} already exists`);
+      } catch (error) {
+        // If error is not "branch not found", rethrow it
+        if (error.status !== 404) {
+          throw error;
+        }
+        // Branch doesn't exist, which is what we want
+      }
+
+      // Create the new branch by creating a reference
+      await this.octokit.git.createRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `refs/heads/${newBranchName}`,
+        sha: sourceSha,
+      });
+
+      return {
+        success: true,
+        message: `Branch ${newBranchName} created successfully from ${sourceBranch}`,
+        branchName: newBranchName
+      };
+    } catch (error) {
+      throw new Error(`Failed to create branch: ${error.message}`);
+    }
+  }
+
+  /**
+   * Checkout to a branch and pull latest changes (uses local git if available)
+   * Note: This requires a local git repository clone
+   */
+  async checkoutAndPull(branchName, repoPath) {
+    if (!this.isConnected()) {
+      throw new Error('Not connected to GitHub');
+    }
+
+    try {
+      // Use simple-git to work with local repository
+      const simpleGit = require('simple-git');
+      const git = simpleGit(repoPath || process.cwd());
+
+      // Check if branch exists locally
+      const branchSummary = await git.branchLocal();
+      if (!branchSummary.all.includes(branchName)) {
+        // Branch doesn't exist locally, fetch and checkout
+        try {
+          await git.fetch();
+          await git.checkout(['-b', branchName, `origin/${branchName}`]);
+        } catch (error) {
+          // Try to checkout existing remote branch
+          await git.checkout(['-b', branchName, `origin/${branchName}`]).catch(async () => {
+            // If that fails, try to checkout the branch directly
+            await git.checkout(branchName);
+          });
+        }
+      } else {
+        // Check if there are uncommitted changes
+        const status = await git.status();
+        if (!status.isClean()) {
+          throw new Error('You have uncommitted changes. Please commit or stash them before switching branches.');
+        }
+
+        // Fetch latest changes
+        try {
+          await git.fetch();
+        } catch (fetchError) {
+          console.warn('Fetch failed:', fetchError.message);
+        }
+
+        // Checkout the branch
+        await git.checkout(branchName);
+      }
+
+      // Try to pull latest changes
+      let pullResult = null;
+      try {
+        pullResult = await git.pull();
+      } catch (pullError) {
+        return {
+          success: true,
+          message: `Checked out to ${branchName} successfully, but pull failed: ${pullError.message}`,
+          branchName: branchName,
+          pullFailed: true,
+          pullError: pullError.message
+        };
+      }
+
+      return {
+        success: true,
+        message: `Checked out to ${branchName} and pulled latest changes successfully`,
+        branchName: branchName,
+        pullResult: pullResult
+      };
+    } catch (error) {
+      throw new Error(`Failed to checkout and pull: ${error.message}`);
+    }
+  }
+
+  /**
    * Helper to determine branch type
    */
   _getBranchType(branchName) {

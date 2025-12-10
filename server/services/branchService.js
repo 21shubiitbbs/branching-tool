@@ -58,7 +58,23 @@ class BranchService {
    */
   async getBranchDetails(branchName) {
     try {
-      const currentBranch = (await this.git.branchLocal()).current;
+      // Validate branch name
+      if (!branchName || typeof branchName !== 'string' || branchName.trim() === '') {
+        throw new Error('Invalid branch name provided');
+      }
+      
+      // Check if branch name contains invalid characters or patterns
+      if (branchName.includes('uncommitted') || branchName.includes('...') || branchName.includes('..')) {
+        throw new Error(`Invalid branch name: ${branchName}`);
+      }
+      
+      // Get all branches first to validate
+      const branchSummary = await this.git.branchLocal();
+      if (!branchSummary.all.includes(branchName)) {
+        throw new Error(`Branch ${branchName} does not exist locally`);
+      }
+      
+      const currentBranch = branchSummary.current;
       const log = await this.git.log({ from: branchName, maxCount: 10 });
       const status = await this.git.status();
 
@@ -135,6 +151,192 @@ class BranchService {
       };
     } catch (error) {
       throw new Error(`Failed to get repository status: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a new branch from a source branch
+   */
+  async createBranch(newBranchName, sourceBranch) {
+    try {
+      // Check if branch already exists
+      const branchSummary = await this.git.branchLocal();
+      if (branchSummary.all.includes(newBranchName)) {
+        throw new Error(`Branch ${newBranchName} already exists`);
+      }
+
+      // Check if source branch exists
+      if (!branchSummary.all.includes(sourceBranch)) {
+        throw new Error(`Source branch ${sourceBranch} does not exist`);
+      }
+
+      // Create and checkout the new branch from source
+      await this.git.checkoutBranch(newBranchName, sourceBranch);
+
+      return {
+        success: true,
+        message: `Branch ${newBranchName} created successfully from ${sourceBranch}`,
+        branchName: newBranchName
+      };
+    } catch (error) {
+      throw new Error(`Failed to create branch: ${error.message}`);
+    }
+  }
+
+  /**
+   * Get detailed uncommitted changes
+   */
+  async getUncommittedChanges() {
+    try {
+      const status = await this.git.status();
+      
+      return {
+        hasChanges: !status.isClean(),
+        modified: status.modified || [],
+        created: status.created || [],
+        deleted: status.deleted || [],
+        not_added: status.not_added || [],
+        conflicted: status.conflicted || [],
+        staged: status.staged || [],
+        files: [
+          ...(status.modified || []),
+          ...(status.created || []),
+          ...(status.deleted || []),
+          ...(status.not_added || [])
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Failed to get uncommitted changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Commit changes
+   */
+  async commitChanges(message) {
+    try {
+      const status = await this.git.status();
+      
+      // Add all changes
+      await this.git.add('.');
+      
+      // Commit with message
+      const commit = await this.git.commit(message);
+      
+      return {
+        success: true,
+        message: 'Changes committed successfully',
+        commit: commit
+      };
+    } catch (error) {
+      throw new Error(`Failed to commit changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Stash changes
+   */
+  async stashChanges(message) {
+    try {
+      const stash = await this.git.stash(['push', '-m', message || 'Stashed changes before checkout']);
+      
+      return {
+        success: true,
+        message: 'Changes stashed successfully',
+        stash: stash
+      };
+    } catch (error) {
+      throw new Error(`Failed to stash changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Discard all changes
+   */
+  async discardChanges() {
+    try {
+      // Reset all changes
+      await this.git.reset(['--hard']);
+      
+      // Clean untracked files
+      await this.git.clean('f', ['-d']);
+      
+      return {
+        success: true,
+        message: 'All changes discarded successfully'
+      };
+    } catch (error) {
+      throw new Error(`Failed to discard changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Checkout to a branch and pull latest changes
+   */
+  async checkoutAndPull(branchName) {
+    try {
+      // Check if branch exists
+      const branchSummary = await this.git.branchLocal();
+      if (!branchSummary.all.includes(branchName)) {
+        throw new Error(`Branch ${branchName} does not exist locally`);
+      }
+
+      // Check if there are uncommitted changes
+      const status = await this.git.status();
+      if (!status.isClean()) {
+        // Return error with details about uncommitted changes
+        const changes = await this.getUncommittedChanges();
+        const error = new Error('You have uncommitted changes. Please commit or stash them before switching branches.');
+        error.uncommittedChanges = changes;
+        throw error;
+      }
+
+      // Fetch latest changes from remote
+      try {
+        await this.git.fetch();
+      } catch (fetchError) {
+        // If fetch fails (e.g., no remote), continue with checkout
+        console.warn('Fetch failed, continuing with checkout:', fetchError.message);
+      }
+
+      // Checkout the branch
+      await this.git.checkout(branchName);
+
+      // Try to pull latest changes (if branch has upstream)
+      let pullResult = null;
+      try {
+        // Check if branch has upstream tracking
+        const branchInfo = await this.git.branch(['-vv']);
+        const hasUpstream = branchInfo.all.some(b => {
+          const branchData = branchInfo.branches[b];
+          return branchData && branchData.name === branchName && branchData.upstream;
+        });
+
+        if (hasUpstream) {
+          pullResult = await this.git.pull();
+        } else {
+          // No upstream, just checkout
+          pullResult = { message: 'Branch has no upstream tracking. Checked out successfully.' };
+        }
+      } catch (pullError) {
+        // If pull fails, still return success for checkout
+        return {
+          success: true,
+          message: `Checked out to ${branchName} successfully, but pull failed: ${pullError.message}`,
+          branchName: branchName,
+          pullFailed: true,
+          pullError: pullError.message
+        };
+      }
+
+      return {
+        success: true,
+        message: `Checked out to ${branchName} and pulled latest changes successfully`,
+        branchName: branchName,
+        pullResult: pullResult
+      };
+    } catch (error) {
+      throw new Error(`Failed to checkout and pull: ${error.message}`);
     }
   }
 
