@@ -96,6 +96,36 @@ export const branchApi = {
     const response = await api.get('/status');
     return response.data;
   },
+
+  createBranch: async (newBranchName: string, sourceBranch: string) => {
+    const response = await api.post('/branches/create', { newBranchName, sourceBranch });
+    return response.data;
+  },
+
+  checkoutAndPull: async (branchName: string) => {
+    const response = await api.post('/branches/checkout', { branchName });
+    return response.data;
+  },
+
+  getUncommittedChanges: async () => {
+    const response = await api.get('/branches/uncommitted');
+    return response.data;
+  },
+
+  commitChanges: async (message: string) => {
+    const response = await api.post('/branches/commit', { message });
+    return response.data;
+  },
+
+  stashChanges: async (message?: string) => {
+    const response = await api.post('/branches/stash', { message });
+    return response.data;
+  },
+
+  discardChanges: async () => {
+    const response = await api.post('/branches/discard');
+    return response.data;
+  },
 };
 
 // ========== GitHub API ==========
@@ -170,6 +200,16 @@ export const githubApi = {
     const response = await api.get('/github/pull-requests', { 
       params: { branch, state } 
     });
+    return response.data;
+  },
+
+  createBranch: async (newBranchName: string, sourceBranch: string) => {
+    const response = await api.post('/github/branches/create', { newBranchName, sourceBranch });
+    return response.data;
+  },
+
+  checkoutAndPull: async (branchName: string) => {
+    const response = await api.post('/github/branches/checkout', { branchName });
     return response.data;
   },
 };

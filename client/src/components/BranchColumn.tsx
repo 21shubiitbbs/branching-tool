@@ -9,16 +9,27 @@ interface BranchColumnProps {
   type: 'prod' | 'uat' | 'feature' | 'hotfix' | 'other';
   branches: Branch[];
   onDrop: (sourceBranch: string, targetBranch: string) => void;
+  onCreateBranch?: (sourceBranch: string, targetType: 'prod' | 'uat' | 'feature' | 'hotfix' | 'other') => void;
+  onCheckout?: (branchName: string) => void;
 }
 
-const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDrop }) => {
+const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDrop, onCreateBranch, onCheckout }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: 'BRANCH',
-    drop: (item: { branchName: string }) => {
-      // When dropping on a column, we need to find a target branch
-      // For now, we'll use the first branch in the column or the column type
-      if (branches.length > 0) {
-        onDrop(item.branchName, branches[0].name);
+    drop: (item: { branchName: string }, monitor) => {
+      // Check if we're dropping on a branch card (not the column itself)
+      // If a nested drop target (BranchCard) handled the drop, didDrop() will be true
+      const didDropOnCard = monitor.didDrop();
+      
+      // Only handle column drop if no card handled it
+      if (!didDropOnCard) {
+        // If we have onCreateBranch handler, create new branch
+        if (onCreateBranch) {
+          onCreateBranch(item.branchName, type);
+        } else if (branches.length > 0) {
+          // Fallback to old behavior if no onCreateBranch handler
+          onDrop(item.branchName, branches[0].name);
+        }
       }
     },
     collect: (monitor) => ({
@@ -56,7 +67,7 @@ const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDr
       </div>
       <div className="branch-list">
         {branches.map((branch) => (
-          <BranchCard key={branch.name} branch={branch} onDrop={onDrop} />
+          <BranchCard key={branch.name} branch={branch} onDrop={onDrop} onDoubleClick={onCheckout} />
         ))}
         {branches.length === 0 && (
           <div className="empty-column">No branches in this category</div>
