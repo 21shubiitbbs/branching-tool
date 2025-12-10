@@ -56,7 +56,7 @@ function App() {
     });
 
     // Listen for GitHub push events
-    const unsubscribePush = websocketService.on('github:push', (data) => {
+    const unsubscribePush = websocketService.on('github:push', (data: { branch: string }) => {
       if (useGitHub && githubConnected) {
         setSuccessMessage(`Branch ${data.branch} was updated on GitHub`);
         loadBranches();
@@ -64,8 +64,8 @@ function App() {
     });
 
     // Listen for PR creation
-    const unsubscribePR = websocketService.on('github:pr-created', (data) => {
-      if (data.success) {
+    const unsubscribePR = websocketService.on('github:pr-created', (data: { success: boolean; pr?: { number: number; title: string; state: string; url: string; diffUrl: string } }) => {
+      if (data.success && data.pr) {
         setSuccessMessage(`Pull request #${data.pr.number} created successfully!`);
         window.open(data.pr.url, '_blank');
       }
@@ -122,20 +122,27 @@ function App() {
         }
 
         // Create pull request
-        const result = await githubApi.createPullRequest(
-          sourceBranch,
-          targetBranch,
-          `Merge ${sourceBranch} into ${targetBranch}`,
-          `Automated merge from ${sourceBranch} to ${targetBranch}`
-        );
+        try {
+          const result = await githubApi.createPullRequest(
+            sourceBranch,
+            targetBranch,
+            `Merge ${sourceBranch} into ${targetBranch}`,
+            `Automated merge from ${sourceBranch} to ${targetBranch}`
+          );
 
-        if (result.success) {
-          setSuccessMessage(`Pull request #${result.pr.number} created successfully!`);
+          if (result.success) {
+            setSuccessMessage(`Pull request #${result.pr.number} created successfully!`);
+            setDiffModal(null);
+            // Reload branches
+            await loadBranches();
+          } else {
+            setError('Failed to create pull request');
+          }
+        } catch (prError: any) {
+          // Extract error message from API response
+          const errorMessage = prError.response?.data?.error || prError.message || 'Failed to create pull request';
+          setError(errorMessage);
           setDiffModal(null);
-          // Reload branches
-          await loadBranches();
-        } else {
-          setError('Failed to create pull request');
         }
         return;
       }
