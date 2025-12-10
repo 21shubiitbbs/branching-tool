@@ -351,7 +351,7 @@ class GitHubService {
     if (['uat', 'staging', 'pre-prod'].includes(normalized)) {
       return 'uat';
     }
-    if (branchName.startsWith('feature/')) {
+    if (branchName.startsWith('feature/') || branchName.startsWith('feat')) {
       return 'feature';
     }
     if (branchName.startsWith('hotfix/')) {

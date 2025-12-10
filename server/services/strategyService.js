@@ -9,7 +9,7 @@ class StrategyService {
     this.branchTypes = {
       prod: ['prod', 'production', 'main', 'master'],
       uat: ['uat', 'staging', 'pre-prod'],
-      feature: /^feature\//,
+      feature: /^(feature\/|feat)/,
       hotfix: /^hotfix\//
     };
 
