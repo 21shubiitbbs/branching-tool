@@ -271,6 +271,51 @@ class BranchService {
   }
 
   /**
+   * Push changes to remote branch
+   */
+  async pushChanges(branchName = null) {
+    try {
+      // Get current branch if not specified
+      if (!branchName) {
+        const branchSummary = await this.git.branchLocal();
+        branchName = branchSummary.current;
+      }
+
+      // Push to remote
+      const pushResult = await this.git.push('origin', branchName);
+      
+      return {
+        success: true,
+        message: `Changes pushed successfully to ${branchName}`,
+        pushResult: pushResult
+      };
+    } catch (error) {
+      throw new Error(`Failed to push changes: ${error.message}`);
+    }
+  }
+
+  /**
+   * Commit and push changes
+   */
+  async commitAndPush(message, branchName = null) {
+    try {
+      // Commit changes first
+      await this.commitChanges(message);
+      
+      // Then push
+      const pushResult = await this.pushChanges(branchName);
+      
+      return {
+        success: true,
+        message: `Changes committed and pushed successfully`,
+        pushResult: pushResult
+      };
+    } catch (error) {
+      throw new Error(`Failed to commit and push: ${error.message}`);
+    }
+  }
+
+  /**
    * Checkout to a branch and pull latest changes
    */
   async checkoutAndPull(branchName) {

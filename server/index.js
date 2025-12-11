@@ -178,6 +178,33 @@ app.post('/api/branches/discard', async (req, res) => {
   }
 });
 
+// Push changes to remote
+app.post('/api/branches/push', async (req, res) => {
+  try {
+    const { branchName } = req.body;
+    const result = await branchService.pushChanges(branchName);
+    res.json(result);
+  } catch (error) {
+    console.error('Error pushing changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Commit and push changes
+app.post('/api/branches/commit-and-push', async (req, res) => {
+  try {
+    const { message, branchName } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Commit message is required' });
+    }
+    const result = await branchService.commitAndPush(message, branchName);
+    res.json(result);
+  } catch (error) {
+    console.error('Error committing and pushing changes:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get branch details (commits ahead/behind, last commit, etc.)
 app.get('/api/branches/:branchName', async (req, res) => {
   try {
