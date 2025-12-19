@@ -96,6 +96,41 @@ export const branchApi = {
     const response = await api.get('/status');
     return response.data;
   },
+
+  pushChanges: async (branchName?: string) => {
+    const response = await api.post('/branches/push', { branchName });
+    return response.data;
+  },
+
+  commitAndPush: async (message: string, branchName?: string) => {
+    const response = await api.post('/branches/commit-and-push', { message, branchName });
+    return response.data;
+  },
+
+  checkoutAndPull: async (branchName: string) => {
+    const response = await api.post('/branches/checkout', { branchName });
+    return response.data;
+  },
+
+  getUncommittedChanges: async () => {
+    const response = await api.get('/branches/uncommitted');
+    return response.data;
+  },
+
+  stashChanges: async (message?: string) => {
+    const response = await api.post('/branches/stash', { message });
+    return response.data;
+  },
+
+  discardChanges: async () => {
+    const response = await api.post('/branches/discard');
+    return response.data;
+  },
+
+  createBranchWithPrefix: async (sourceBranch: string, prefixBranch: string) => {
+    const response = await api.post('/branches/create-with-prefix', { sourceBranch, prefixBranch });
+    return response.data;
+  },
 };
 
 // ========== GitHub API ==========
@@ -170,6 +205,16 @@ export const githubApi = {
     const response = await api.get('/github/pull-requests', { 
       params: { branch, state } 
     });
+    return response.data;
+  },
+
+  checkoutAndPull: async (branchName: string) => {
+    const response = await api.post('/github/branches/checkout', { branchName });
+    return response.data;
+  },
+
+  createBranchWithPrefix: async (sourceBranch: string, prefixBranch: string) => {
+    const response = await api.post('/github/branches/create-with-prefix', { sourceBranch, prefixBranch });
     return response.data;
   },
 };

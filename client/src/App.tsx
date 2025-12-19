@@ -5,6 +5,7 @@ import BranchColumn from './components/BranchColumn';
 import DiffModal from './components/DiffModal';
 import MergeHistory from './components/MergeHistory';
 import GitHubConnection from './components/GitHubConnection';
+import UncommittedChangesModal from './components/UncommittedChangesModal';
 import { branchApi, githubApi, Branch, Diff, MergeHistory as MergeHistoryType, GitHubConnectionStatus } from './services/api';
 import { websocketService } from './services/websocket';
 import './App.css';
@@ -19,6 +20,11 @@ function App() {
   const [mergeHistory, setMergeHistory] = useState<MergeHistoryType[]>([]);
   const [githubConnected, setGithubConnected] = useState(false);
   const [useGitHub, setUseGitHub] = useState(false);
+  const [uncommittedChangesModal, setUncommittedChangesModal] = useState<{
+    targetBranch: string;
+    currentBranch: string;
+    uncommittedChanges: any;
+  } | null>(null);
 
   const loadBranches = useCallback(async () => {
     try {
@@ -91,9 +97,9 @@ function App() {
     }
   }, [loadBranches, loadMergeHistory, useGitHub]);
 
-  const handleDrop = async (sourceBranch: string, targetBranch: string) => {
+  const handleDrop = async (sourceBranch: string, targetBranch: string | null, columnType?: string) => {
     if (sourceBranch === targetBranch) {
-      setError('Cannot merge a branch into itself');
+      setError('Cannot create a branch from itself');
       return;
     }
 
@@ -101,96 +107,73 @@ function App() {
       setError(null);
       setSuccessMessage(null);
 
-      // For GitHub, create a pull request instead of direct merge
-      if (useGitHub && githubConnected) {
-        // Show diff preview
-        try {
-          const diff = await githubApi.getDiff(sourceBranch, targetBranch);
-          setDiffModal({ source: sourceBranch, target: targetBranch, diff });
-        } catch (err) {
-          console.error('Failed to load diff:', err);
-        }
+      // Determine prefix branch
+      let prefixBranch: string | null = null;
 
-        // Ask for confirmation
-        const confirmed = window.confirm(
-          `Create a pull request to merge ${sourceBranch} into ${targetBranch}?`
-        );
-
-        if (!confirmed) {
-          setDiffModal(null);
+      if (targetBranch) {
+        // Dropped on a specific branch - use that branch as prefix source
+        prefixBranch = targetBranch;
+      } else if (columnType) {
+        // Dropped on a column (empty or on column itself) - find a representative branch from that column
+        const groupedBranches = {
+          prod: branches.filter(b => b.type === 'prod'),
+          uat: branches.filter(b => b.type === 'uat'),
+          feature: branches.filter(b => b.type === 'feature'),
+          hotfix: branches.filter(b => b.type === 'hotfix'),
+          other: branches.filter(b => b.type === 'other'),
+        };
+        const columnBranches = groupedBranches[columnType as keyof typeof groupedBranches];
+        if (columnBranches && columnBranches.length > 0) {
+          // Use the first branch in the column as prefix source
+          prefixBranch = columnBranches[0].name;
+        } else {
+          // No branches in column - use column type as prefix
+          // We'll need to create a temporary branch name or use a default
+          setError(`Cannot create branch: No branches in ${columnType} section to use as prefix`);
           return;
         }
-
-        // Create pull request
-        try {
-          const result = await githubApi.createPullRequest(
-            sourceBranch,
-            targetBranch,
-            `Merge ${sourceBranch} into ${targetBranch}`,
-            `Automated merge from ${sourceBranch} to ${targetBranch}`
-          );
-
-          if (result.success) {
-            setSuccessMessage(`Pull request #${result.pr.number} created successfully!`);
-            setDiffModal(null);
-            // Reload branches
-            await loadBranches();
-          } else {
-            setError('Failed to create pull request');
-          }
-        } catch (prError: any) {
-          // Extract error message from API response
-          const errorMessage = prError.response?.data?.error || prError.message || 'Failed to create pull request';
-          setError(errorMessage);
-          setDiffModal(null);
-        }
+      } else {
+        setError('Invalid drop target');
         return;
       }
 
-      // For local Git, perform direct merge
-      // Validate merge first
-      const validation = await branchApi.validateMerge(sourceBranch, targetBranch);
-      if (!validation.allowed) {
-        setError(validation.reason);
+      if (!prefixBranch) {
+        setError('Could not determine prefix branch');
         return;
-      }
-
-      // Show diff preview before merging
-      try {
-        const diff = await branchApi.getDiff(sourceBranch, targetBranch);
-        setDiffModal({ source: sourceBranch, target: targetBranch, diff });
-      } catch (err) {
-        // If diff fails, still allow merge
-        console.error('Failed to load diff:', err);
       }
 
       // Ask for confirmation
+      const newBranchName = prefixBranch.includes('/') 
+        ? `${prefixBranch.split('/')[0]}/${sourceBranch.includes('/') ? sourceBranch.split('/').slice(1).join('/') : sourceBranch}`
+        : `${prefixBranch}/${sourceBranch.includes('/') ? sourceBranch.split('/').slice(1).join('/') : sourceBranch}`;
+
       const confirmed = window.confirm(
-        `Are you sure you want to merge ${sourceBranch} into ${targetBranch}?`
+        `Create a new branch "${newBranchName}" from "${sourceBranch}" with prefix from "${prefixBranch}"?`
       );
 
       if (!confirmed) {
-        setDiffModal(null);
         return;
       }
 
-      // Perform merge
-      const result = await branchApi.performMerge(sourceBranch, targetBranch);
-      
-      if (result.success) {
-        setSuccessMessage(result.message || `Successfully merged ${sourceBranch} into ${targetBranch}`);
-        setDiffModal(null);
-        // Reload branches and history
-        await loadBranches();
-        await loadMergeHistory();
-      } else {
-        setError(result.error || 'Merge failed');
-        if (result.requiresResolution) {
-          setError('Merge conflict detected. Please resolve conflicts manually.');
+      // Create branch with prefix
+      try {
+        const result = useGitHub && githubConnected
+          ? await githubApi.createBranchWithPrefix(sourceBranch, prefixBranch)
+          : await branchApi.createBranchWithPrefix(sourceBranch, prefixBranch);
+        
+        if (result.success) {
+          setSuccessMessage(result.message || `Successfully created branch ${result.branchName}`);
+          // Reload branches
+          await loadBranches();
+        } else {
+          setError(result.error || 'Failed to create branch');
         }
+      } catch (err: any) {
+        const errorMessage = err.response?.data?.error || err.message || 'Failed to create branch';
+        setError(errorMessage);
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to perform merge');
+      setError(err.message || 'Failed to create branch');
     }
   };
 
@@ -206,6 +189,129 @@ function App() {
     setGithubConnected(false);
     setUseGitHub(false);
     loadBranches();
+  };
+
+  const handleBranchDoubleClick = async (targetBranchName: string) => {
+    try {
+      setError(null);
+      setSuccessMessage(null);
+
+      // For GitHub mode, we can't check uncommitted changes the same way
+      if (useGitHub && githubConnected) {
+        // Try to switch directly - GitHub service will handle errors
+        await switchToBranch(targetBranchName);
+        return;
+      }
+
+      // Get current branch and check for uncommitted changes
+      const status = await branchApi.getRepositoryStatus();
+      const currentBranch = status.currentBranch;
+
+      // If already on the target branch, do nothing
+      if (currentBranch === targetBranchName) {
+        return;
+      }
+
+      // Check if there are uncommitted changes
+      if (status.hasUncommittedChanges) {
+        // Get detailed uncommitted changes
+        const changes = await branchApi.getUncommittedChanges();
+        
+        // Show modal to handle uncommitted changes
+        setUncommittedChangesModal({
+          targetBranch: targetBranchName,
+          currentBranch: currentBranch,
+          uncommittedChanges: changes,
+        });
+        return;
+      }
+
+      // No uncommitted changes, switch directly
+      await switchToBranch(targetBranchName);
+    } catch (err: any) {
+      setError(err.message || 'Failed to switch branch');
+    }
+  };
+
+  const switchToBranch = async (branchName: string) => {
+    try {
+      setError(null);
+      setSuccessMessage(null);
+
+      // For GitHub, use GitHub API
+      if (useGitHub && githubConnected) {
+        await githubApi.checkoutAndPull(branchName);
+      } else {
+        await branchApi.checkoutAndPull(branchName);
+      }
+
+      setSuccessMessage(`Switched to branch: ${branchName}`);
+      setUncommittedChangesModal(null);
+      await loadBranches();
+    } catch (err: any) {
+      // Check if it's an uncommitted changes error (only for local Git)
+      if (!useGitHub && (err.response?.data?.code === 'UNCOMMITTED_CHANGES' || 
+          err.message?.includes('uncommitted changes'))) {
+        try {
+          const changes = err.response?.data?.uncommittedChanges || 
+                         await branchApi.getUncommittedChanges();
+          const status = await branchApi.getRepositoryStatus();
+          
+          setUncommittedChangesModal({
+            targetBranch: branchName,
+            currentBranch: status.currentBranch,
+            uncommittedChanges: changes,
+          });
+        } catch (fetchErr: any) {
+          // If we can't fetch changes, just show the error
+          setError(err.message || 'Failed to switch branch');
+          setUncommittedChangesModal(null);
+        }
+      } else {
+        setError(err.message || 'Failed to switch branch');
+        setUncommittedChangesModal(null);
+      }
+    }
+  };
+
+  const handleCommitAndPush = async (message: string) => {
+    if (!uncommittedChangesModal) return;
+
+    try {
+      const status = await branchApi.getRepositoryStatus();
+      await branchApi.commitAndPush(message, status.currentBranch);
+      
+      // After commit and push, switch to target branch
+      await switchToBranch(uncommittedChangesModal.targetBranch);
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const handleStash = async (message?: string) => {
+    if (!uncommittedChangesModal) return;
+
+    try {
+      await branchApi.stashChanges(message);
+      
+      // After stashing, switch to target branch
+      await switchToBranch(uncommittedChangesModal.targetBranch);
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
+  const handleRevert = async () => {
+    if (!uncommittedChangesModal) return;
+
+    try {
+      await branchApi.discardChanges();
+      
+      // After reverting, switch to target branch
+      await switchToBranch(uncommittedChangesModal.targetBranch);
+    } catch (err: any) {
+      throw err;
+    }
   };
 
   // Group branches by type
@@ -283,24 +389,28 @@ function App() {
               type="prod"
               branches={groupedBranches.prod}
               onDrop={handleDrop}
+              onBranchDoubleClick={handleBranchDoubleClick}
             />
             <BranchColumn
               title="UAT / Staging"
               type="uat"
               branches={groupedBranches.uat}
               onDrop={handleDrop}
+              onBranchDoubleClick={handleBranchDoubleClick}
             />
             <BranchColumn
               title="Feature Branches"
               type="feature"
               branches={groupedBranches.feature}
               onDrop={handleDrop}
+              onBranchDoubleClick={handleBranchDoubleClick}
             />
             <BranchColumn
               title="Hotfix Branches"
               type="hotfix"
               branches={groupedBranches.hotfix}
               onDrop={handleDrop}
+              onBranchDoubleClick={handleBranchDoubleClick}
             />
             {groupedBranches.other.length > 0 && (
               <BranchColumn
@@ -308,6 +418,7 @@ function App() {
                 type="other"
                 branches={groupedBranches.other}
                 onDrop={handleDrop}
+                onBranchDoubleClick={handleBranchDoubleClick}
               />
             )}
           </div>
@@ -326,6 +437,18 @@ function App() {
           <MergeHistory
             history={mergeHistory}
             onClose={() => setShowHistory(false)}
+          />
+        )}
+
+        {uncommittedChangesModal && (
+          <UncommittedChangesModal
+            targetBranch={uncommittedChangesModal.targetBranch}
+            currentBranch={uncommittedChangesModal.currentBranch}
+            uncommittedChanges={uncommittedChangesModal.uncommittedChanges}
+            onCommitAndPush={handleCommitAndPush}
+            onStash={handleStash}
+            onRevert={handleRevert}
+            onCancel={() => setUncommittedChangesModal(null)}
           />
         )}
       </div>

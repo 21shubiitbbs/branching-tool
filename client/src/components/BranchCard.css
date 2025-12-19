@@ -8,6 +8,15 @@
   cursor: grab;
   transition: all 0.2s ease;
   position: relative;
+  user-select: none;
+}
+
+.branch-card:not(.current) {
+  cursor: grab;
+}
+
+.branch-card:not(.current):hover {
+  cursor: grab;
 }
 
 .branch-card:hover {

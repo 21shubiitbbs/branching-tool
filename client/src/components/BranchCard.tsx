@@ -5,10 +5,11 @@ import './BranchCard.css';
 
 interface BranchCardProps {
   branch: Branch;
-  onDrop: (sourceBranch: string, targetBranch: string) => void;
+  onDrop: (sourceBranch: string, targetBranch: string | null, columnType?: string) => void;
+  onDoubleClick?: (branchName: string) => void;
 }
 
-const BranchCard: React.FC<BranchCardProps> = ({ branch, onDrop }) => {
+const BranchCard: React.FC<BranchCardProps> = ({ branch, onDrop, onDoubleClick }) => {
   const [{ isDragging }, drag] = useDrag({
     type: 'BRANCH',
     item: { branchName: branch.name },
@@ -21,6 +22,7 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, onDrop }) => {
     accept: 'BRANCH',
     drop: (item: { branchName: string }) => {
       if (item.branchName !== branch.name) {
+        // When dropping on a specific branch, use that branch as the prefix source
         onDrop(item.branchName, branch.name);
       }
     },
@@ -63,6 +65,13 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, onDrop }) => {
   const cardRef = React.useRef<HTMLDivElement>(null);
   drag(drop(cardRef));
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onDoubleClick && !branch.current) {
+      onDoubleClick(branch.name);
+    }
+  };
+
   return (
     <div
       ref={cardRef}
@@ -72,6 +81,8 @@ const BranchCard: React.FC<BranchCardProps> = ({ branch, onDrop }) => {
         opacity: isDragging ? 0.5 : 1,
         backgroundColor: isOver && canDrop ? '#e0e7ff' : undefined,
       }}
+      onDoubleClick={handleDoubleClick}
+      title={branch.current ? 'Current branch' : 'Double-click to switch to this branch'}
     >
       <div className="branch-header">
         <span className="branch-icon">{getTypeIcon(branch.type)}</span>

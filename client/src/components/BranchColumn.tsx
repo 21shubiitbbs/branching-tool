@@ -8,18 +8,17 @@ interface BranchColumnProps {
   title: string;
   type: 'prod' | 'uat' | 'feature' | 'hotfix' | 'other';
   branches: Branch[];
-  onDrop: (sourceBranch: string, targetBranch: string) => void;
+  onDrop: (sourceBranch: string, targetBranch: string | null, columnType?: string) => void;
+  onBranchDoubleClick?: (branchName: string) => void;
 }
 
-const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDrop }) => {
+const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDrop, onBranchDoubleClick }) => {
   const [{ isOver, canDrop }, drop] = useDrop({
     accept: 'BRANCH',
     drop: (item: { branchName: string }) => {
-      // When dropping on a column, we need to find a target branch
-      // For now, we'll use the first branch in the column or the column type
-      if (branches.length > 0) {
-        onDrop(item.branchName, branches[0].name);
-      }
+      // When dropping on a column (not a specific branch), pass null as targetBranch
+      // and pass the column type so we can use it as prefix
+      onDrop(item.branchName, null, type);
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
@@ -56,7 +55,7 @@ const BranchColumn: React.FC<BranchColumnProps> = ({ title, type, branches, onDr
       </div>
       <div className="branch-list">
         {branches.map((branch) => (
-          <BranchCard key={branch.name} branch={branch} onDrop={onDrop} />
+          <BranchCard key={branch.name} branch={branch} onDrop={onDrop} onDoubleClick={onBranchDoubleClick} />
         ))}
         {branches.length === 0 && (
           <div className="empty-column">No branches in this category</div>
