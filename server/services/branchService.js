@@ -184,6 +184,51 @@ class BranchService {
   }
 
   /**
+   * Create a new branch from source branch with prefix from drop branch
+   */
+  async createBranchWithPrefix(sourceBranch, prefixBranch) {
+    try {
+      // Check if branches exist
+      const branchSummary = await this.git.branchLocal();
+      if (!branchSummary.all.includes(sourceBranch)) {
+        throw new Error(`Source branch ${sourceBranch} does not exist`);
+      }
+      if (!branchSummary.all.includes(prefixBranch)) {
+        throw new Error(`Prefix branch ${prefixBranch} does not exist`);
+      }
+
+      // Extract prefix from prefixBranch (e.g., "prod/main" -> "prod", "feature/test" -> "feature")
+      const prefix = prefixBranch.includes('/') ? prefixBranch.split('/')[0] : prefixBranch;
+
+      // Extract branch name from sourceBranch (remove existing prefix if any)
+      // e.g., "feature/my-feature" -> "my-feature", "hotfix/bug-fix" -> "bug-fix"
+      let branchName = sourceBranch;
+      if (sourceBranch.includes('/')) {
+        branchName = sourceBranch.split('/').slice(1).join('/');
+      }
+
+      // Create new branch name with prefix
+      const newBranchName = `${prefix}/${branchName}`;
+
+      // Check if branch already exists
+      if (branchSummary.all.includes(newBranchName)) {
+        throw new Error(`Branch ${newBranchName} already exists`);
+      }
+
+      // Create and checkout the new branch from source
+      await this.git.checkoutBranch(newBranchName, sourceBranch);
+
+      return {
+        success: true,
+        message: `Branch ${newBranchName} created successfully from ${sourceBranch} with prefix from ${prefixBranch}`,
+        branchName: newBranchName
+      };
+    } catch (error) {
+      throw new Error(`Failed to create branch with prefix: ${error.message}`);
+    }
+  }
+
+  /**
    * Get detailed uncommitted changes
    */
   async getUncommittedChanges() {
@@ -217,16 +262,84 @@ class BranchService {
     try {
       const status = await this.git.status();
       
-      // Add all changes
-      await this.git.add('.');
+      // Add all files - use --all flag to include all changes
+      // This is equivalent to 'git add -A' which adds all files including untracked
+      await this.git.raw(['add', '--all']);
+      
+      // Verify what was staged
+      const statusAfterAdd = await this.git.status();
+      
+      // If there are still files not staged, add them explicitly
+      if (statusAfterAdd.not_added && statusAfterAdd.not_added.length > 0) {
+        for (const file of statusAfterAdd.not_added) {
+          try {
+            await this.git.add(file);
+          } catch (err) {
+            console.warn(`Failed to add file ${file}:`, err.message);
+          }
+        }
+      }
+      
+      // Also ensure modified files are staged
+      if (statusAfterAdd.modified && statusAfterAdd.modified.length > 0) {
+        for (const file of statusAfterAdd.modified) {
+          try {
+            await this.git.add(file);
+          } catch (err) {
+            console.warn(`Failed to add modified file ${file}:`, err.message);
+          }
+        }
+      }
+      
+      // Final check before commit
+      const finalStatusBeforeCommit = await this.git.status();
       
       // Commit with message
       const commit = await this.git.commit(message);
       
+      // Verify commit was successful by checking status
+      const finalStatus = await this.git.status();
+      
+      if (!finalStatus.isClean()) {
+        const remaining = {
+          modified: finalStatus.modified || [],
+          not_added: finalStatus.not_added || [],
+          deleted: finalStatus.deleted || [],
+          created: finalStatus.created || []
+        };
+        console.warn('Warning: Working directory is not clean after commit. Remaining changes:', remaining);
+        
+        // Try to add and commit remaining files
+        if (remaining.not_added.length > 0 || remaining.modified.length > 0) {
+          try {
+            // Add remaining files
+            await this.git.raw(['add', '--all']);
+            const statusAfterRetry = await this.git.status();
+            
+            // If there are staged files, commit them
+            if (statusAfterRetry.staged && statusAfterRetry.staged.length > 0) {
+              await this.git.commit(`${message} (additional files)`);
+              const finalStatusAfterRetry = await this.git.status();
+              
+              if (!finalStatusAfterRetry.isClean()) {
+                console.warn('Still have uncommitted changes after retry:', finalStatusAfterRetry);
+              }
+            }
+          } catch (retryError) {
+            console.error('Failed to commit remaining files:', retryError.message);
+          }
+        }
+      }
+      
+      // Final status check
+      const ultimateStatus = await this.git.status();
+      
       return {
         success: true,
         message: 'Changes committed successfully',
-        commit: commit
+        commit: commit,
+        isClean: ultimateStatus.isClean(),
+        hadRemainingChanges: !finalStatus.isClean()
       };
     } catch (error) {
       throw new Error(`Failed to commit changes: ${error.message}`);
@@ -299,16 +412,39 @@ class BranchService {
    */
   async commitAndPush(message, branchName = null) {
     try {
-      // Commit changes first
-      await this.commitChanges(message);
+      // Commit changes first (this will handle retrying if needed)
+      const commitResult = await this.commitChanges(message);
       
-      // Then push
+      // Verify working directory is clean after commit
+      const statusAfterCommit = await this.git.status();
+      
+      if (!statusAfterCommit.isClean()) {
+        // If still not clean, this is a problem - we can't proceed
+        const remaining = {
+          modified: statusAfterCommit.modified || [],
+          not_added: statusAfterCommit.not_added || [],
+          deleted: statusAfterCommit.deleted || [],
+          created: statusAfterCommit.created || []
+        };
+        throw new Error(`Cannot push: Working directory is not clean after commit. Remaining files: ${JSON.stringify(remaining)}`);
+      }
+      
+      // Working directory is clean, proceed with push
       const pushResult = await this.pushChanges(branchName);
+      
+      // Final verification that we're still clean
+      const finalStatus = await this.git.status();
+      
+      if (!finalStatus.isClean()) {
+        console.warn('Warning: Working directory has changes after push:', finalStatus);
+      }
       
       return {
         success: true,
         message: `Changes committed and pushed successfully`,
-        pushResult: pushResult
+        pushResult: pushResult,
+        isClean: finalStatus.isClean(),
+        commitResult: commitResult
       };
     } catch (error) {
       throw new Error(`Failed to commit and push: ${error.message}`);

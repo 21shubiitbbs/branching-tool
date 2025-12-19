@@ -86,6 +86,22 @@ app.post('/api/branches/create', async (req, res) => {
   }
 });
 
+// Create a new branch with prefix from drop branch
+app.post('/api/branches/create-with-prefix', async (req, res) => {
+  try {
+    const { sourceBranch, prefixBranch } = req.body;
+    if (!sourceBranch || !prefixBranch) {
+      return res.status(400).json({ error: 'Source branch and prefix branch are required' });
+    }
+
+    const result = await branchService.createBranchWithPrefix(sourceBranch, prefixBranch);
+    res.json(result);
+  } catch (error) {
+    console.error('Error creating branch with prefix:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Checkout to a branch and pull latest changes
 app.post('/api/branches/checkout', async (req, res) => {
   try {
@@ -473,6 +489,37 @@ app.post('/api/github/branches/create', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('Error creating GitHub branch:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new branch with prefix from drop branch (GitHub)
+app.post('/api/github/branches/create-with-prefix', async (req, res) => {
+  try {
+    if (!githubService.isConnected()) {
+      return res.status(400).json({ error: 'Not connected to GitHub' });
+    }
+    const { sourceBranch, prefixBranch } = req.body;
+    if (!sourceBranch || !prefixBranch) {
+      return res.status(400).json({ error: 'Source branch and prefix branch are required' });
+    }
+
+    const result = await githubService.createBranchWithPrefix(sourceBranch, prefixBranch);
+    
+    // Emit branch creation event
+    io.emit('github:branch-created', result);
+    
+    // Refresh branches
+    try {
+      const branches = await githubService.getAllBranches();
+      io.emit('github:branches-updated', branches);
+    } catch (e) {
+      console.error('Error refreshing branches after creation:', e);
+    }
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error creating GitHub branch with prefix:', error);
     res.status(500).json({ error: error.message });
   }
 });

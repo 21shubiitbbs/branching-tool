@@ -430,6 +430,99 @@ class GitHubService {
   }
 
   /**
+   * Create a new branch from source branch with prefix from drop branch
+   */
+  async createBranchWithPrefix(sourceBranch, prefixBranch) {
+    if (!this.isConnected()) {
+      throw new Error('Not connected to GitHub');
+    }
+
+    try {
+      // Extract prefix from prefixBranch (e.g., "prod/main" -> "prod", "feature/test" -> "feature")
+      const prefix = prefixBranch.includes('/') ? prefixBranch.split('/')[0] : prefixBranch;
+
+      // Extract branch name from sourceBranch (remove existing prefix if any)
+      // e.g., "feature/my-feature" -> "my-feature", "hotfix/bug-fix" -> "bug-fix"
+      let branchName = sourceBranch;
+      if (sourceBranch.includes('/')) {
+        branchName = sourceBranch.split('/').slice(1).join('/');
+      }
+
+      // Create new branch name with prefix
+      const newBranchName = `${prefix}/${branchName}`;
+
+      // Check if source branch exists
+      try {
+        await this.octokit.repos.getBranch({
+          owner: this.owner,
+          repo: this.repo,
+          branch: sourceBranch,
+        });
+      } catch (error) {
+        if (error.status === 404) {
+          throw new Error(`Source branch ${sourceBranch} does not exist`);
+        }
+        throw error;
+      }
+
+      // Check if prefix branch exists
+      try {
+        await this.octokit.repos.getBranch({
+          owner: this.owner,
+          repo: this.repo,
+          branch: prefixBranch,
+        });
+      } catch (error) {
+        if (error.status === 404) {
+          throw new Error(`Prefix branch ${prefixBranch} does not exist`);
+        }
+        throw error;
+      }
+
+      // Get the SHA of the source branch
+      const { data: sourceBranchData } = await this.octokit.repos.getBranch({
+        owner: this.owner,
+        repo: this.repo,
+        branch: sourceBranch,
+      });
+
+      const sourceSha = sourceBranchData.commit.sha;
+
+      // Check if new branch already exists
+      try {
+        await this.octokit.repos.getBranch({
+          owner: this.owner,
+          repo: this.repo,
+          branch: newBranchName,
+        });
+        throw new Error(`Branch ${newBranchName} already exists`);
+      } catch (error) {
+        // If error is not "branch not found", rethrow it
+        if (error.status !== 404) {
+          throw error;
+        }
+        // Branch doesn't exist, which is what we want
+      }
+
+      // Create the new branch by creating a reference
+      await this.octokit.git.createRef({
+        owner: this.owner,
+        repo: this.repo,
+        ref: `refs/heads/${newBranchName}`,
+        sha: sourceSha,
+      });
+
+      return {
+        success: true,
+        message: `Branch ${newBranchName} created successfully from ${sourceBranch} with prefix from ${prefixBranch}`,
+        branchName: newBranchName
+      };
+    } catch (error) {
+      throw new Error(`Failed to create branch with prefix: ${error.message}`);
+    }
+  }
+
+  /**
    * Checkout to a branch and pull latest changes (uses local git if available)
    * Note: This requires a local git repository clone
    */
